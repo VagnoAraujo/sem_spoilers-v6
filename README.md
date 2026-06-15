@@ -1,144 +1,116 @@
-# 🎬 Sem Spoilers
+# Sem Spoilers
 
-> App pessoal de catálogo cinematográfico — Filmes, Séries, Animações e Documentários  
-> Visual dark estilo HBO · Azul 💙 + Dourado 💛 + Dark 🖤 (Cruzeiro!)
+App Expo/React Native para organizar filmes, séries, animações e documentários sem spoilers, com listas pessoais, TMDB, assistente IA e importação de arquivos.
 
----
+**Desenvolvido por AIra9 para cinéfilos.**
 
-## ✨ Funcionalidades
+## O que o app faz
 
-- 📋 **Listas pessoais** — Assistido, Assistindo, Quero Assistir, Abandonado
-- 🎬 **Dados automáticos via TMDB** — Pôster, ano, elenco, diretor, sinopse, continuações
-- 📺 **Status de séries** — Finalizada, Cancelada ⚠, Em Andamento
-- 🌀 **Marcador de Plot Twist**
-- 🤖 **Assistente IA Groq** — Recomendações e resumos sem spoilers
-- 📸 **OCR de prints de tela** — Extrai títulos de screenshots de qualquer app
-- 📁 **Importação inteligente** — TXT, XLSX, DOCX, PDF, imagens
-- 🔄 **Deduplicação automática** — Nunca duplica títulos ao mesclar listas
-- ☁️ **Sincronização Supabase** (opcional)
-- 🔍 **Filtros avançados** — por gênero, diretor, tipo, status, plot twist
-- 📊 **Dashboard** com estatísticas da sua coleção
+- Organiza títulos em listas: assistido, assistindo, quero assistir e abandonado.
+- Busca pôster, ano, sinopse, elenco e diretores pelo TMDB.
+- Permite cadastro manual quando o TMDB não encontra o título.
+- Importa listas por arquivo TXT, CSV, XLS ou XLSX.
+- Tenta ler prints/imagens com IA, usando Gemini ou Groq, quando uma chave válida está configurada.
+- Salva dados localmente no celular com AsyncStorage.
+- Pode sincronizar com Supabase, se configurado.
 
----
+## Versão do projeto
 
-## 🚀 Configuração rápida
+- Expo SDK 54
+- Expo Router 6
+- React Native 0.81.5
+- TypeScript
 
-### 1. Clone e instale
+## Como rodar no PC e testar no Expo Go
 
 ```bash
-git clone https://github.com/[seu-usuario]/sem-spoilers.git
-cd sem-spoilers
+git clone https://github.com/VagnoAraujo/sem_spoilers-v6.git
+cd sem_spoilers-v6
 npm install
+npx expo start --clear
 ```
 
-### 2. Chaves de API (todas gratuitas)
+Depois, abra o Expo Go no celular e leia o QR Code.
+
+## Formato certo para importar listas
+
+Para evitar títulos quebrados, a importação confiável aceita somente:
+
+- `.txt`
+- `.csv`
+- `.tsv`
+- `.xls`
+- `.xlsx`
+
+PDF, DOC e DOCX não são recomendados no Expo Go. Eles podem chegar como texto binário e gerar nomes sem sentido, por isso foram removidos da importação local.
+
+### Melhor modelo de planilha ou CSV
+
+Use colunas com estes nomes:
+
+```csv
+Titulo;Diretor;Ano
+Cidade de Deus;Fernando Meirelles;2002
+Breaking Bad;Vince Gilligan;2008
+A Viagem de Chihiro;Hayao Miyazaki;2001
+```
+
+Também funciona em Excel com as colunas:
+
+```text
+Titulo | Diretor | Ano
+```
+
+### Modelo simples para TXT
+
+Um título por linha:
+
+```text
+Cidade de Deus
+Breaking Bad
+A Viagem de Chihiro
+```
+
+Ou com dados separados por ponto e vírgula:
+
+```text
+Cidade de Deus; Fernando Meirelles; 2002
+Breaking Bad; Vince Gilligan; 2008
+```
+
+## Chaves de API
+
+Configure dentro do próprio app, na aba de configurações.
 
 | API | Link | Para que serve |
-|-----|------|----------------|
-| **TMDB** | [themoviedb.org/settings/api](https://www.themoviedb.org/settings/api) | Pôsteres, dados de filmes/séries |
-| **Groq** | [console.groq.com/keys](https://console.groq.com/keys) | Assistente IA + OCR de imagens |
-| **Supabase** | [app.supabase.com](https://app.supabase.com) | Backup na nuvem (opcional) |
+| --- | --- | --- |
+| TMDB | https://www.themoviedb.org/settings/api | Buscar dados, pôsteres e detalhes dos títulos |
+| Gemini | https://aistudio.google.com/app/apikey | Ler títulos em imagens/prints |
+| Groq | https://console.groq.com/keys | Assistente IA e leitura alternativa de imagem |
+| Supabase | https://app.supabase.com | Backup/sincronização opcional |
 
-Configure as chaves dentro do próprio app → aba **Config**.
+Se o Gemini mostrar erro 429, significa cota excedida. O app não deve travar; aguarde a cota voltar, use outra chave ou importe por TXT/CSV/XLSX.
 
-### 3. Supabase (opcional)
+## Observações importantes
 
-Abra o SQL Editor do seu projeto e cole o conteúdo de `supabase/schema.sql`.
+- Para listas grandes, prefira Excel ou CSV.
+- Se tiver diretores, coloque em uma coluna chamada `Diretor` ou `Diretores`.
+- Se tiver ano, coloque em uma coluna chamada `Ano`.
+- O TMDB ajuda a enriquecer os dados, mas a lista também pode ser salva manualmente.
 
-### 4. Rodar no celular
+## Estrutura principal
 
-```bash
-npx expo start
-# Escaneie o QR code com o Expo Go (Android/iOS)
+```text
+app/                 Telas do aplicativo
+app/importar.tsx     Tela de importação de listas
+lib/importacao.ts    Leitura e limpeza dos arquivos importados
+lib/tmdb.ts          Integração com TMDB
+lib/gemini.ts        OCR com Gemini
+lib/groq.ts          Assistente IA e OCR alternativo
+lib/app-context.tsx  Estado global do app
+types/index.ts       Tipos do projeto
 ```
 
----
+## Descrição curta para o GitHub
 
-## 📦 Build do APK
-
-### Via GitHub Actions (recomendado)
-
-1. Crie uma conta em [expo.dev](https://expo.dev)
-2. Gere um token: **expo.dev → Account Settings → Access Tokens**
-3. Adicione no GitHub: **Settings → Secrets → EXPO_TOKEN**
-4. Clique em **Actions → Build APK → Run workflow**
-5. Quando concluir, baixe o APK em **expo.dev → Projects → sem-spoilers → Builds**
-
-### Via terminal local
-
-```bash
-npm install -g eas-cli
-eas login
-eas build --platform android --profile preview
-```
-
----
-
-## 📱 Telas do app
-
-| Tela | Descrição |
-|------|-----------|
-| **Início** | Dashboard com stats, assistindo agora, ações rápidas |
-| **Listas** | Catálogo completo com busca e filtros avançados |
-| **IA** | Chat com assistente cinematográfico (Groq) |
-| **Descobrir** | Tendências TMDB + busca global |
-| **Config** | Chaves de API, Supabase, backup |
-
----
-
-## 🎨 Design
-
-- Tema **dark cinema** com paleta Cruzeiro (azul `#1B3F9E` + dourado `#C49A00`)
-- Animações fluidas com `Animated API`
-- Efeito HUD com cantos estilo sci-fi no dashboard
-- Cards com gradiente e pôsteres TMDB
-
----
-
-## 🛠 Stack técnica
-
-- **Expo SDK 52** + Expo Router v4
-- **TypeScript** estrito
-- **AsyncStorage** — persistência local
-- **Supabase** — banco em nuvem (opcional)
-- **TMDB API** — dados cinematográficos
-- **Groq API** — LLM gratuito (llama-3.3-70b + llama-4-scout vision)
-- **XLSX** — leitura de planilhas
-- **expo-document-picker** + **expo-image-picker**
-
----
-
-## 📂 Estrutura do projeto
-
-```
-sem-spoilers/
-├── app/
-│   ├── (tabs)/
-│   │   ├── index.tsx          # Início / Dashboard
-│   │   ├── listas.tsx         # Catálogo com filtros
-│   │   ├── assistente.tsx     # Chat IA
-│   │   ├── descobrir.tsx      # TMDB trending + busca
-│   │   └── configuracoes.tsx  # Configurações
-│   ├── titulo/[id].tsx        # Detalhe do título
-│   ├── editar/[id].tsx        # Edição manual
-│   ├── buscar-tmdb.tsx        # Busca + adicionar
-│   └── importar.tsx           # Importação de listas
-├── lib/
-│   ├── app-context.tsx        # Estado global
-│   ├── storage.ts             # AsyncStorage
-│   ├── supabase.ts            # Cliente Supabase
-│   ├── tmdb.ts                # TMDB API
-│   ├── groq.ts                # Groq AI + Vision
-│   └── importacao.ts          # Importação de arquivos
-├── constants/
-│   └── cores.ts               # Paleta e gradientes
-├── types/
-│   └── index.ts               # TypeScript types
-└── supabase/
-    └── schema.sql             # Schema do banco
-```
-
----
-
-Feito com 💙🖤💛 por **AIra9 · Vagno Araújo**  
-*"Cinema é a arte de fazer o tempo parar."*
+App Expo/React Native para organizar filmes, séries e animações sem spoilers, com importação de listas, TMDB, IA e armazenamento local.
