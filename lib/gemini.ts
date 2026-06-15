@@ -1,7 +1,6 @@
-// lib/gemini.ts — Google Gemini Flash: Vision/OCR para prints
+// lib/gemini.ts - Google Gemini Flash: Vision/OCR para prints
 // Chave gratuita: https://aistudio.google.com/app/apikey
 
-// Tenta modelos em ordem até um funcionar
 const MODELOS = [
   'gemini-2.0-flash',
   'gemini-2.0-flash-lite',
@@ -44,9 +43,9 @@ Se não encontrar nenhum título, retorne: []`;
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        // 404 = modelo não existe, tenta o próximo
-        if ((err as any)?.error?.code === 404) continue;
-        console.error('[Gemini] Erro:', err);
+        const code = (err as any)?.error?.code;
+
+        if (code === 404) continue;
         return [];
       }
 
@@ -60,11 +59,17 @@ Se não encontrar nenhum título, retorne: []`;
           .map((l: string) => l.replace(/^[-*\d.)"'\s]+/, '').replace(/["',]+$/, '').trim())
           .filter((l: string) => l.length > 2 && /[a-zA-ZÀ-ÿ]/.test(l));
       }
-      try { return JSON.parse(match[0]) as string[]; } catch { return []; }
 
-    } catch (e: any) {
-      console.error(`[Gemini] Erro no modelo ${modelo}:`, e.message);
+      try {
+        const parsed = JSON.parse(match[0]);
+        return Array.isArray(parsed) ? parsed.filter((item) => typeof item === 'string') : [];
+      } catch {
+        return [];
+      }
+    } catch {
+      // Falha de rede, cota ou chave invalida nao deve abrir tela vermelha no Expo Go.
     }
   }
+
   return [];
 }
