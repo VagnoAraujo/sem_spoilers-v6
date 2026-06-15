@@ -21,8 +21,6 @@ import { setGroqKey } from './groq';
 import { setGeminiKey } from './gemini';
 import { Configuracoes, EstatisticasApp, StatusUsuario, Titulo, TipoTitulo } from '@/types';
 
-// ─── Tipos do Contexto ──────────────────────────────
-
 interface FiltrosAtivos {
   busca: string;
   status?: StatusUsuario;
@@ -34,67 +32,52 @@ interface FiltrosAtivos {
 }
 
 interface AppContextValue {
-  // Dados
   titulos: Titulo[];
   carregando: boolean;
   sincronizando: boolean;
-
-  // Config
   config: Configuracoes;
-
-  // Filtros
   filtros: FiltrosAtivos;
   setFiltros: (f: Partial<FiltrosAtivos>) => void;
   titulosFiltrados: Titulo[];
-
-  // CRUD
   adicionarTitulo: (t: Omit<Titulo, 'id' | 'data_adicionado'>) => Promise<Titulo>;
   atualizarTitulo: (id: string, updates: Partial<Titulo>) => Promise<void>;
   removerTitulo: (id: string) => Promise<void>;
   importarLote: (novos: Omit<Titulo, 'id' | 'data_adicionado'>[]) => Promise<{ adicionados: number; duplicatas: number }>;
-
-  // Config
   salvarConfig: (c: Partial<Configuracoes>) => Promise<void>;
-
-  // Estatísticas
   estatisticas: EstatisticasApp;
-
-  // Utilitários
   recarregar: () => Promise<void>;
   sincronizarNuvem: () => Promise<void>;
-
-  // Listas derivadas
   todosGeneros: string[];
   todosDiretores: string[];
 }
 
-// ─── Filtros padrão ─────────────────────────────────
-
 const FILTROS_INICIAIS: FiltrosAtivos = {
-  busca:       '',
-  status:      undefined,
-  tipo:        undefined,
-  genero:      undefined,
-  diretor:     undefined,
+  busca: '',
+  status: undefined,
+  tipo: undefined,
+  genero: undefined,
+  diretor: undefined,
   soPlotTwist: false,
-  ordenar:     'recente',
+  ordenar: 'recente',
 };
-
-// ─── Contexto ───────────────────────────────────────
 
 const AppContext = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [titulos,      setTitulos]      = useState<Titulo[]>([]);
-  const [config,       setConfig]       = useState<Configuracoes>({
-    tmdbApiKey: '', groqApiKey: '', supabaseUrl: '',
-    supabaseAnonKey: '', usarSupabase: false, nomeUsuario: 'Diretor',
+  const [titulos, setTitulos] = useState<Titulo[]>([]);
+  const [config, setConfig] = useState<Configuracoes>({
+    tmdbApiKey: '',
+    groqApiKey: '',
+    geminiApiKey: '',
+    supabaseUrl: '',
+    supabaseAnonKey: '',
+    usarSupabase: false,
+    nomeUsuario: 'Diretor',
   });
-  const [carregando,   setCarregando]   = useState(true);
+  const [carregando, setCarregando] = useState(true);
   const [sincronizando, setSincronizando] = useState(false);
-  const [filtros,      setFiltrosState] = useState<FiltrosAtivos>(FILTROS_INICIAIS);
+  const [filtros, setFiltrosState] = useState<FiltrosAtivos>(FILTROS_INICIAIS);
 
-  // ─── Inicialização ─────────────────────────────
   useEffect(() => {
     (async () => {
       setCarregando(true);
@@ -106,12 +89,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setTitulos(titulosLocal);
       setConfig(configLocal);
 
-      // Aplica chaves de API nas libs
       if (configLocal.tmdbApiKey) setTMDBKey(configLocal.tmdbApiKey);
       if (configLocal.groqApiKey) setGroqKey(configLocal.groqApiKey);
       if (configLocal.geminiApiKey) setGeminiKey(configLocal.geminiApiKey);
 
-      // Inicia Supabase se configurado
       if (configLocal.usarSupabase && configLocal.supabaseUrl && configLocal.supabaseAnonKey) {
         await initSupabase(configLocal.supabaseUrl, configLocal.supabaseAnonKey);
       }
@@ -119,8 +100,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setCarregando(false);
     })();
   }, []);
-
-  // ─── CRUD ─────────────────────────────────────
 
   const adicionarTitulo = useCallback(
     async (dados: Omit<Titulo, 'id' | 'data_adicionado'>): Promise<Titulo> => {
@@ -157,14 +136,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [titulos]
   );
 
-  // ─── Importação em lote com dedup ───────────────
-
   const importarLote = useCallback(
     async (
       novos: Omit<Titulo, 'id' | 'data_adicionado'>[]
     ): Promise<{ adicionados: number; duplicatas: number }> => {
       let adicionados = 0;
-      let duplicatas  = 0;
+      let duplicatas = 0;
       const listaAtualizada = [...titulos];
 
       const norm = (s: string) =>
@@ -198,8 +175,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [titulos]
   );
 
-  // ─── Config ────────────────────────────────────
-
   const salvarConfig = useCallback(async (novaConfig: Partial<Configuracoes>) => {
     const atualizada = { ...config, ...novaConfig };
     setConfig(atualizada);
@@ -217,8 +192,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [config]);
 
-  // ─── Sync Supabase ─────────────────────────────
-
   const sincronizarNuvem = useCallback(async () => {
     if (!isSupabaseAtivo()) return;
     setSincronizando(true);
@@ -231,8 +204,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setTitulos(t);
   }, []);
 
-  // ─── Filtros ───────────────────────────────────
-
   const setFiltros = useCallback((f: Partial<FiltrosAtivos>) => {
     setFiltrosState((prev) => ({ ...prev, ...f }));
   }, []);
@@ -240,10 +211,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const titulosFiltrados = React.useMemo(() => {
     let lista = [...titulos];
 
-    if (filtros.status)      lista = lista.filter((t) => t.status_usuario === filtros.status);
-    if (filtros.tipo)        lista = lista.filter((t) => t.tipo === filtros.tipo);
-    if (filtros.genero)      lista = lista.filter((t) => t.generos.includes(filtros.genero!));
-    if (filtros.diretor)     lista = lista.filter((t) => t.diretores.includes(filtros.diretor!));
+    if (filtros.status) lista = lista.filter((t) => t.status_usuario === filtros.status);
+    if (filtros.tipo) lista = lista.filter((t) => t.tipo === filtros.tipo);
+    if (filtros.genero) lista = lista.filter((t) => t.generos.includes(filtros.genero!));
+    if (filtros.diretor) lista = lista.filter((t) => t.diretores.includes(filtros.diretor!));
     if (filtros.soPlotTwist) lista = lista.filter((t) => t.tem_plot_twist);
 
     if (filtros.busca.trim()) {
@@ -258,29 +229,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     switch (filtros.ordenar) {
-      case 'titulo':  lista.sort((a, b) => a.titulo.localeCompare(b.titulo)); break;
-      case 'nota':    lista.sort((a, b) => (b.nota_pessoal ?? 0) - (a.nota_pessoal ?? 0)); break;
-      case 'ano':     lista.sort((a, b) => (b.ano_lancamento ?? 0) - (a.ano_lancamento ?? 0)); break;
-      default:        lista.sort((a, b) => new Date(b.data_adicionado).getTime() - new Date(a.data_adicionado).getTime());
+      case 'titulo': lista.sort((a, b) => a.titulo.localeCompare(b.titulo)); break;
+      case 'nota': lista.sort((a, b) => (b.nota_pessoal ?? 0) - (a.nota_pessoal ?? 0)); break;
+      case 'ano': lista.sort((a, b) => (b.ano_lancamento ?? 0) - (a.ano_lancamento ?? 0)); break;
+      default: lista.sort((a, b) => new Date(b.data_adicionado).getTime() - new Date(a.data_adicionado).getTime());
     }
 
     return lista;
   }, [titulos, filtros]);
 
-  // ─── Estatísticas ──────────────────────────────
-
   const estatisticas = React.useMemo<EstatisticasApp>(() => ({
-    totalAssistidos:      titulos.filter((t) => t.status_usuario === 'assistido').length,
-    totalAssistindo:      titulos.filter((t) => t.status_usuario === 'assistindo').length,
-    totalQueroAssistir:   titulos.filter((t) => t.status_usuario === 'quero_assistir').length,
-    totalAbandonados:     titulos.filter((t) => t.status_usuario === 'abandonado').length,
-    totalFilmes:          titulos.filter((t) => t.tipo === 'filme').length,
-    totalSeries:          titulos.filter((t) => t.tipo === 'serie').length,
-    totalAnimacoes:       titulos.filter((t) => t.tipo === 'animacao').length,
-    totalDocumentarios:   titulos.filter((t) => t.tipo === 'documentario').length,
+    totalAssistidos: titulos.filter((t) => t.status_usuario === 'assistido').length,
+    totalAssistindo: titulos.filter((t) => t.status_usuario === 'assistindo').length,
+    totalQueroAssistir: titulos.filter((t) => t.status_usuario === 'quero_assistir').length,
+    totalAbandonados: titulos.filter((t) => t.status_usuario === 'abandonado').length,
+    totalFilmes: titulos.filter((t) => t.tipo === 'filme').length,
+    totalSeries: titulos.filter((t) => t.tipo === 'serie').length,
+    totalAnimacoes: titulos.filter((t) => t.tipo === 'animacao').length,
+    totalDocumentarios: titulos.filter((t) => t.tipo === 'documentario').length,
   }), [titulos]);
-
-  // ─── Derivados ─────────────────────────────────
 
   const todosGeneros = React.useMemo(
     () => [...new Set(titulos.flatMap((t) => t.generos))].sort(),
