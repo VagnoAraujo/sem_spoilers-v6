@@ -32,8 +32,8 @@ export interface Titulo {
   poster_url?: string;
   backdrop_url?: string;
   sinopse?: string;
-  nota_pessoal?: number; // 0-10
-  nota_tmdb?: number;    // 0-10
+  nota_pessoal?: number;
+  nota_tmdb?: number;
   generos: string[];
   diretores: string[];
   elenco: string[];
@@ -50,15 +50,12 @@ export interface Titulo {
   tags: string[];
   duracao_minutos?: number;
   origem_importacao?: string;
-  // Feature #2: progresso de séries
   temporada_atual?: number;
   episodio_atual?: number;
-  // Feature #3: review
   nota_emocional?: 'amei' | 'gostei' | 'ok' | 'nao_gostei' | 'odiei';
   data_review?: string;
 }
 
-// TMDB API Types
 export interface TMDBSearchResult {
   id: number;
   title?: string;
@@ -117,7 +114,6 @@ export interface TMDBTVDetail {
   in_production: boolean;
 }
 
-// AI Assistant Types
 export interface MensagemIA {
   role: 'user' | 'assistant';
   content: string;
@@ -125,7 +121,6 @@ export interface MensagemIA {
   imagemBase64?: string;
 }
 
-// App Settings
 export interface Configuracoes {
   tmdbApiKey: string;
   groqApiKey: string;
@@ -136,7 +131,6 @@ export interface Configuracoes {
   nomeUsuario: string;
 }
 
-// Statistics
 export interface EstatisticasApp {
   totalAssistidos: number;
   totalAssistindo: number;
@@ -148,12 +142,13 @@ export interface EstatisticasApp {
   totalDocumentarios: number;
 }
 
-// Import feature
 export interface TituloImportado {
-  tituloOriginal: string;        // text extracted from file/screenshot
-  tmdbResult?: TMDBSearchResult; // match found on TMDB
-  duplicata?: Titulo | null;     // existing title in user's list
+  tituloOriginal: string;
+  tmdbResult?: TMDBSearchResult;
+  duplicata?: Titulo | null;
   status: 'buscando' | 'encontrado' | 'nao_encontrado' | 'duplicata';
   selecionado: boolean;
   tipo?: TipoTitulo;
+  anoExtraido?: number;
+  diretoresExtraidos?: string[];
 }
