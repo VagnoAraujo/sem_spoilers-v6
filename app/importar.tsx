@@ -10,7 +10,13 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { CORES, GRADIENTES } from '@/constants/cores';
 import { useApp } from '@/lib/app-context';
-import { selecionarArquivo, extrairNomesDoArquivo, checarDuplicata, importarViaPrintInteligente } from '@/lib/importacao';
+import {
+  selecionarArquivo,
+  extrairItensDoArquivo,
+  checarDuplicata,
+  importarViaPrintInteligente,
+  ImportacaoExtraida,
+} from '@/lib/importacao';
 import { buscarPorNome, detalharFilme, detalharSerie, converterFilme, converterSerie } from '@/lib/tmdb';
 import { TituloImportado } from '@/types';
 
@@ -26,36 +32,40 @@ export default function ImportarScreen() {
   const [resultado, setResultado] = useState({ adicionados: 0, duplicatas: 0 });
   const cancelado = useRef(false);
 
-  // ─── Processar lista de nomes ──────────────────
-
-  async function processarNomes(nomes: string[]) {
-    if (!nomes.length) {
-      Alert.alert('Vazio', 'Nenhum título encontrado no arquivo.');
+  async function processarItens(entrada: ImportacaoExtraida[]) {
+    if (!entrada.length) {
+      Alert.alert(
+        'Vazio',
+        'Nenhum título válido foi encontrado. Use TXT/CSV/XLSX com uma linha por título ou colunas Título, Diretor e Ano.'
+      );
       setEtapa('inicio');
       return;
     }
 
     cancelado.current = false;
-    const novosItens: TituloImportado[] = nomes.map((n) => ({
-      tituloOriginal: n,
-      duplicata:      checarDuplicata(n, titulos),
-      status:         'buscando',
-      selecionado:    true,
+    const novosItens: TituloImportado[] = entrada.map((item) => ({
+      tituloOriginal: item.titulo,
+      duplicata: checarDuplicata(item.titulo, titulos),
+      status: 'buscando',
+      selecionado: true,
+      anoExtraido: item.ano,
+      diretoresExtraidos: item.diretores,
     }));
 
     setItens(novosItens);
     setEtapa('processando');
-    setTotalProg(nomes.length);
+    setTotalProg(entrada.length);
     setProgresso(0);
 
     const temTMDB = !!config.tmdbApiKey;
     const atualizado = [...novosItens];
 
-    for (let i = 0; i < nomes.length; i++) {
+    for (let i = 0; i < entrada.length; i++) {
       if (cancelado.current) break;
       setProgresso(i + 1);
 
-      const dup = checarDuplicata(nomes[i], titulos);
+      const nome = entrada[i].titulo;
+      const dup = checarDuplicata(nome, titulos);
       if (dup) {
         atualizado[i] = { ...atualizado[i], status: 'duplicata', duplicata: dup, selecionado: false };
         setItens([...atualizado]);
@@ -63,47 +73,52 @@ export default function ImportarScreen() {
       }
 
       if (temTMDB) {
-        const tmdbResult = await buscarPorNome(nomes[i]);
-        if (tmdbResult) {
-          atualizado[i] = { ...atualizado[i], status: 'encontrado', tmdbResult, selecionado: true };
-        } else {
-          atualizado[i] = { ...atualizado[i], status: 'nao_encontrado', selecionado: true };
-        }
+        const tmdbResult = await buscarPorNome(nome);
+        atualizado[i] = tmdbResult
+          ? { ...atualizado[i], status: 'encontrado', tmdbResult, selecionado: true }
+          : { ...atualizado[i], status: 'nao_encontrado', selecionado: true };
       } else {
         atualizado[i] = { ...atualizado[i], status: 'nao_encontrado', selecionado: true };
       }
 
       setItens([...atualizado]);
-      // Pequena pausa para não sobrecarregar TMDB
-      await new Promise((r) => setTimeout(r, 220));
+      await new Promise((r) => setTimeout(r, 180));
     }
 
     setEtapa('revisao');
   }
 
-  // ─── Ações de importação ──────────────────────
-
   async function importarArquivo() {
-    const result = await selecionarArquivo();
-    if (result.canceled || !result.assets?.[0]) return;
-    const asset = result.assets[0];
-    setEtapa('processando');
-    const nomes = await extrairNomesDoArquivo(asset.uri, asset.mimeType);
-    await processarNomes(nomes);
+    try {
+      const result = await selecionarArquivo();
+      if (result.canceled || !result.assets?.[0]) return;
+      const asset = result.assets[0];
+      setEtapa('processando');
+      setProgresso(0);
+      setTotalProg(0);
+      const itensExtraidos = await extrairItensDoArquivo(asset.uri, asset.mimeType, asset.name);
+      await processarItens(itensExtraidos);
+    } catch (e) {
+      Alert.alert(
+        'Formato não suportado',
+        e instanceof Error ? e.message : 'Use arquivos TXT, CSV ou XLSX. PDF/DOC/DOCX não são confiáveis no Expo Go.'
+      );
+      setEtapa('inicio');
+    }
   }
 
   async function importarPrint() {
     const temOCR = !!(config.geminiApiKey || config.groqApiKey);
     if (!temOCR) {
-      Alert.alert('Chave de IA necessária', 'Configure Gemini (recomendado) ou Groq nas Configurações para usar OCR de imagens.');
+      Alert.alert('Chave de IA necessária', 'Configure Gemini ou Groq nas Configurações para usar OCR de imagens.');
       return;
     }
     const nomes = await importarViaPrintInteligente(config.groqApiKey, config.geminiApiKey ?? '');
     if (!nomes.length) {
-      Alert.alert('Nada encontrado', 'Não foi possível extrair títulos da imagem.');
+      Alert.alert('Nada encontrado', 'Não foi possível extrair títulos da imagem. Se o Gemini acusar cota 429, tente Groq ou importe por TXT/CSV/XLSX.');
       return;
     }
-    await processarNomes(nomes);
+    await processarItens(nomes.map((titulo) => ({ titulo, diretores: [] })));
   }
 
   async function confirmarImportacao() {
@@ -113,23 +128,45 @@ export default function ImportarScreen() {
     const dadosParaImportar: any[] = await Promise.all(
       selecionados.map(async (item) => {
         if (item.tmdbResult && temTMDB) {
-          // Tenta buscar detalhes completos
           try {
             if (item.tmdbResult.media_type === 'movie') {
               const d = await detalharFilme(item.tmdbResult.id);
-              if (d) return { ...converterFilme(d), status_usuario: 'quero_assistir', origem_importacao: 'arquivo' };
+              if (d) {
+                const convertido = converterFilme(d);
+                return {
+                  ...convertido,
+                  ano_lancamento: convertido.ano_lancamento ?? item.anoExtraido,
+                  diretores: convertido.diretores?.length ? convertido.diretores : item.diretoresExtraidos ?? [],
+                  status_usuario: 'quero_assistir',
+                  origem_importacao: 'arquivo',
+                };
+              }
             } else {
               const d = await detalharSerie(item.tmdbResult.id);
-              if (d) return { ...converterSerie(d), status_usuario: 'quero_assistir', origem_importacao: 'arquivo' };
+              if (d) {
+                const convertido = converterSerie(d);
+                return {
+                  ...convertido,
+                  ano_lancamento: convertido.ano_lancamento ?? item.anoExtraido,
+                  diretores: convertido.diretores?.length ? convertido.diretores : item.diretoresExtraidos ?? [],
+                  status_usuario: 'quero_assistir',
+                  origem_importacao: 'arquivo',
+                };
+              }
             }
           } catch { /* fallback abaixo */ }
         }
-        // Sem TMDB ou falhou
+
         return {
           titulo: item.tituloOriginal,
           tipo: 'filme',
-          generos: [], diretores: [], elenco: [], tags: [],
-          tem_plot_twist: false, tem_continuacao: false,
+          ano_lancamento: item.anoExtraido,
+          generos: [],
+          diretores: item.diretoresExtraidos ?? [],
+          elenco: [],
+          tags: [],
+          tem_plot_twist: false,
+          tem_continuacao: false,
           status_usuario: 'quero_assistir',
           origem_importacao: 'arquivo',
         };
@@ -148,11 +185,10 @@ export default function ImportarScreen() {
   }
 
   const selecionadosCount = itens.filter((i) => i.selecionado && i.status !== 'duplicata').length;
-  const duplicatasCount   = itens.filter((i) => i.status === 'duplicata').length;
+  const duplicatasCount = itens.filter((i) => i.status === 'duplicata').length;
 
   return (
     <View style={estilos.container}>
-      {/* ─── HEADER ─────────────────────────────── */}
       <View style={estilos.header}>
         <TouchableOpacity onPress={() => router.back()} style={estilos.btnFechar}>
           <Ionicons name="close" size={22} color={CORES.textoPrimario} />
@@ -160,38 +196,30 @@ export default function ImportarScreen() {
         <Text style={estilos.headerTitulo}>Importar Lista</Text>
       </View>
 
-      {/* ══════════════ ETAPA: INÍCIO ══════════════ */}
       {etapa === 'inicio' && (
         <ScrollView contentContainerStyle={{ padding: 20, gap: 16 }}>
           <Text style={estilos.descricao}>
-            Importe sua lista de títulos de vários formatos. Duplicatas são detectadas automaticamente e nunca são adicionadas duas vezes.
+            Importe listas confiáveis em TXT, CSV ou XLSX. Para melhores resultados, use uma linha por título ou colunas chamadas Título, Diretor e Ano.
           </Text>
 
           <OpcaoCard
             icon="document-text-outline"
-            titulo="Arquivo de texto (.txt)"
-            descricao="Uma linha por título ou separados por vírgula/ponto e vírgula"
+            titulo="Texto ou CSV (.txt, .csv)"
+            descricao="Uma linha por título. Também aceita colunas: Título; Diretor; Ano"
             cor={CORES.corAssistindo}
             onPress={importarArquivo}
           />
           <OpcaoCard
             icon="grid-outline"
             titulo="Planilha Excel (.xlsx, .xls)"
-            descricao="Nomes dos títulos em qualquer coluna ou linha"
+            descricao="Recomendado: colunas Título, Diretor e Ano. É o formato mais preciso."
             cor={CORES.corAssistido}
-            onPress={importarArquivo}
-          />
-          <OpcaoCard
-            icon="document-outline"
-            titulo="Word / PDF (.docx, .doc, .pdf)"
-            descricao="Extrai todos os títulos do documento automaticamente"
-            cor={CORES.corQueroAssistir}
             onPress={importarArquivo}
           />
           <OpcaoCard
             icon="image-outline"
             titulo="Print de tela (OCR via Gemini/Groq)"
-            descricao="Tire print de qualquer lista: Netflix, Amazon, WhatsApp..."
+            descricao="Experimental. Se a IA bater cota, prefira TXT/CSV/XLSX."
             cor={CORES.douradoPrimario}
             badge="IA"
             onPress={importarPrint}
@@ -202,18 +230,17 @@ export default function ImportarScreen() {
           <View style={estilos.infoBox}>
             <Ionicons name="information-circle-outline" size={16} color={CORES.azulClaro} />
             <Text style={estilos.infoTxt}>
-              Com a chave TMDB configurada, o app busca automaticamente pôster, ano, elenco e diretor de cada título.
+              PDF, DOC e DOCX foram removidos da importação local porque no Expo Go eles podem virar texto binário e gerar títulos falsos. Converta para XLSX, CSV ou TXT.
             </Text>
           </View>
         </ScrollView>
       )}
 
-      {/* ══════════════ ETAPA: PROCESSANDO ══════════ */}
       {etapa === 'processando' && (
         <View style={estilos.processandoContainer}>
           <ActivityIndicator size="large" color={CORES.azulClaro} />
           <Text style={estilos.processandoTxt}>
-            Buscando {progresso}/{totalProg} títulos no TMDB...
+            {totalProg > 0 ? `Buscando ${progresso}/${totalProg} títulos no TMDB...` : 'Lendo arquivo...'}
           </Text>
           <View style={estilos.barraContainer}>
             <View style={[estilos.barraProgresso, { width: `${totalProg > 0 ? (progresso / totalProg) * 100 : 0}%` }]} />
@@ -227,7 +254,6 @@ export default function ImportarScreen() {
         </View>
       )}
 
-      {/* ══════════════ ETAPA: REVISÃO ══════════════ */}
       {etapa === 'revisao' && (
         <View style={{ flex: 1 }}>
           <View style={estilos.resumoBar}>
@@ -249,6 +275,11 @@ export default function ImportarScreen() {
             ItemSeparatorComponent={() => <View style={{ height: 6 }} />}
             renderItem={({ item, index }) => {
               const esDuplicata = item.status === 'duplicata';
+              const subtitulo = [
+                item.anoExtraido ? String(item.anoExtraido) : '',
+                item.diretoresExtraidos?.length ? item.diretoresExtraidos.join(', ') : '',
+              ].filter(Boolean).join(' • ');
+
               return (
                 <TouchableOpacity
                   style={[
@@ -278,7 +309,7 @@ export default function ImportarScreen() {
                       {item.tmdbResult?.title ?? item.tmdbResult?.name ?? item.tituloOriginal}
                     </Text>
                     <Text style={estilos.itemOriginal} numberOfLines={1}>
-                      {item.tituloOriginal !== (item.tmdbResult?.title ?? item.tmdbResult?.name) ? item.tituloOriginal : ''}
+                      {subtitulo || (item.tituloOriginal !== (item.tmdbResult?.title ?? item.tmdbResult?.name) ? item.tituloOriginal : '')}
                     </Text>
                     <View style={estilos.itemBadges}>
                       {esDuplicata ? (
@@ -319,7 +350,6 @@ export default function ImportarScreen() {
         </View>
       )}
 
-      {/* ══════════════ ETAPA: CONCLUÍDO ═════════════ */}
       {etapa === 'concluido' && (
         <View style={estilos.concluidoContainer}>
           <View style={estilos.concluidoIcone}>
@@ -347,17 +377,15 @@ export default function ImportarScreen() {
   );
 }
 
-// ─── Componente OpcaoCard ────────────────────────────
-
 function OpcaoCard({ icon, titulo, descricao, cor, onPress, badge, requerGroq, temGroq }: any) {
   const desativado = requerGroq && !temGroq;
   return (
     <TouchableOpacity
       style={[estilos.opcaoCard, desativado && { opacity: 0.5 }]}
-      onPress={desativado ? () => Alert.alert('Configure Groq', 'Acesse as Configurações e adicione sua chave Groq gratuita.') : onPress}
+      onPress={desativado ? () => Alert.alert('Configure IA', 'Acesse as Configurações e adicione uma chave Gemini ou Groq.') : onPress}
       activeOpacity={0.8}
     >
-      <View style={[estilos.opcaoIcone, { backgroundColor: cor + '22' }]}>
+      <View style={[estilos.opcaoIcone, { backgroundColor: cor + '22' }]}> 
         <Ionicons name={icon} size={24} color={cor} />
       </View>
       <View style={{ flex: 1 }}>
@@ -366,7 +394,7 @@ function OpcaoCard({ icon, titulo, descricao, cor, onPress, badge, requerGroq, t
           {badge && <View style={[estilos.badge, { backgroundColor: CORES.douradoFundo }]}><Text style={[estilos.badgeTxt, { color: CORES.douradoClaro }]}>{badge}</Text></View>}
         </View>
         <Text style={estilos.opcaoDesc}>{descricao}</Text>
-        {requerGroq && !temGroq && <Text style={{ fontSize: 10, color: CORES.corQueroAssistir, marginTop: 4 }}>⚠ Requer chave Groq</Text>}
+        {requerGroq && !temGroq && <Text style={{ fontSize: 10, color: CORES.corQueroAssistir, marginTop: 4 }}>⚠ Requer chave de IA</Text>}
       </View>
       <Ionicons name="chevron-forward" size={18} color={CORES.textoFraco} />
     </TouchableOpacity>
