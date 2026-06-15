@@ -1,0 +1,48 @@
+name: Build APK (EAS)
+
+on:
+  workflow_dispatch:          # botão manual "Run workflow" no GitHub
+  push:
+    branches:
+      - main
+    paths:
+      - 'app/**'
+      - 'lib/**'
+      - 'constants/**'
+      - 'package.json'
+      - 'app.json'
+
+jobs:
+  build-apk:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      - name: 🔧 Setup EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: 🏗 Build APK (preview)
+        run: eas build --platform android --profile preview --non-interactive
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+
+      - name: ✅ APK gerado
+        run: |
+          echo "========================================"
+          echo "APK gerado com sucesso!"
+          echo "Acesse: https://expo.dev/accounts/[seu-usuario]/projects/sem-spoilers/builds"
+          echo "========================================"
