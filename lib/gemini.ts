@@ -2,10 +2,10 @@
 // Chave gratuita: https://aistudio.google.com/app/apikey
 
 const MODELOS = [
-  'gemini-2.0-flash',
   'gemini-2.0-flash-lite',
-  'gemini-1.5-flash-latest',
   'gemini-1.5-flash',
+  'gemini-1.5-flash-latest',
+  'gemini-2.0-flash',
 ];
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1/models';
 
@@ -50,24 +50,36 @@ Se não encontrar nenhum título, retorne: []`;
       }
 
       const data = await res.json();
-      const texto: string = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '[]';
+      const texto: string = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+      if (!texto) continue;
 
-      const match = texto.match(/\[[\s\S]*\]/);
-      if (!match) {
-        return texto
-          .split('\n')
-          .map((l: string) => l.replace(/^[-*\d.)"'\s]+/, '').replace(/["',]+$/, '').trim())
-          .filter((l: string) => l.length > 2 && /[a-zA-ZÀ-ÿ]/.test(l));
+      // Tenta extrair array JSON da resposta
+      const match = texto.match(/\[[\s\S]*?\]/);
+      if (match) {
+        try {
+          const parsed = JSON.parse(match[0]);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            return parsed.filter((item) => typeof item === 'string' && item.length > 1);
+          }
+        } catch {
+          // JSON malformado, tenta extração linha a linha
+        }
       }
 
-      try {
-        const parsed = JSON.parse(match[0]);
-        return Array.isArray(parsed) ? parsed.filter((item) => typeof item === 'string') : [];
-      } catch {
-        return [];
-      }
+      // Fallback: extrai linha a linha se não vier JSON
+      const porLinhas = texto
+        .split('\n')
+        .map((l: string) =>
+          l.replace(/^[\s\-*\d."']+/, '').replace(/["',]+$/, '').trim()
+        )
+        .filter((l: string) => l.length > 2 && /[a-zA-ZÀ-ÿ]/.test(l));
+
+      if (porLinhas.length > 0) return porLinhas;
+      continue;
+
     } catch {
-      // Falha de rede, cota ou chave invalida nao deve abrir tela vermelha no Expo Go.
+      // Falha de rede, cota ou chave inválida — tenta próximo modelo
+      continue;
     }
   }
 

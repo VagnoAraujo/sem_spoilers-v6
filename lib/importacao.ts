@@ -110,10 +110,20 @@ function extrairItensDoTexto(texto: string): ImportacaoExtraida[] {
     .map((linha) => linha.trim())
     .filter(Boolean);
 
-  const rows = linhas.flatMap((linha) => {
+  // Corta tudo a partir da seção DIRETORES:
+  const indexDiretores = linhas.findIndex((l) =>
+    /^DIRETORES?\s*[:\-]?\s*$/i.test(l.trim())
+  );
+  const linhasTitulos = indexDiretores >= 0
+    ? linhas.slice(0, indexDiretores)
+    : linhas;
+
+  const rows = linhasTitulos.flatMap((linha) => {
+    if (/^obs[:\s]/i.test(linha)) return [];
+    if (/^[-=_]{3,}$/.test(linha)) return [];
     const cells = parseLinhaSeparada(linha);
     if (cells.length > 1) return [cells];
-    return linha.split(/[;|•·]/).map((parte) => [parte.trim()]).filter((row) => row[0]);
+    return [[linha.trim()]];
   });
 
   return extrairItensDeLinhas(rows);
@@ -163,7 +173,14 @@ function extrairItensDeLinhas(rows: string[][]): ImportacaoExtraida[] {
 }
 
 function criarItem(tituloRaw?: string, diretorRaw?: string, anoRaw?: string): ImportacaoExtraida | null {
-  const tituloComAno = limparTitulo(String(tituloRaw ?? ''));
+  if (!tituloRaw) return null;
+
+  // Remove o marcador (S) de série mas preserva o título
+  const tituloSemMarcador = String(tituloRaw)
+    .replace(/\s*\(S\)\s*$/i, '')
+    .trim();
+
+  const tituloComAno = limparTitulo(tituloSemMarcador);
   if (!tituloComAno || ehLixo(tituloComAno)) return null;
 
   const anoNoTitulo = tituloComAno.match(/\b(19\d{2}|20\d{2})\b/);
@@ -206,7 +223,7 @@ function limparTitulo(valor: string): string {
     .replace(/^\s*[-–—•·*✓✔☑☐]+\s*/, '')
     .replace(/^\s*\d{1,4}\s*[.)\-:]\s*/, '')
     .replace(/\s*\[[^\]]*\]\s*$/g, '')
-    .replace(/\s*\([^)]*(assistido|visto|quero assistir|filme|série|serie)[^)]*\)\s*$/i, '')
+    .replace(/\s*\([^)]*(assistido|visto|quero assistir)[^)]*\)\s*$/i, '')
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -246,8 +263,10 @@ function ehLixo(valor: string): boolean {
   const texto = valor.trim();
   if (texto.length < 2 || texto.length > 120) return true;
   if (!/[a-zA-ZÀ-ÿ]/.test(texto)) return true;
+  if (/^(DIRETORES?|OBS|OBSERVA[CÇ][AÃ]O|FILMES?|S[EÉ]RIES?)\s*[:\-]?$/i.test(texto)) return true;
+  if (/^obs[:\s]/i.test(texto)) return true;
   if (/^(obj|endobj|stream|endstream|xref|trailer|startxref)$/i.test(texto)) return true;
-  if (/[�]/.test(texto)) return true;
+  if (/[<>{}#@$%^_=+~`]/.test(texto) && texto.length < 10) return true;
   const estranhos = (texto.match(/[^\x20-\x7EÀ-ÿ]/g) ?? []).length;
   if (estranhos / texto.length > 0.08) return true;
   const simbolos = (texto.match(/[{}<>#@$%^_=+~`]/g) ?? []).length;
@@ -314,21 +333,24 @@ export async function importarViaPrintInteligente(
   const imagem = await selecionarImagem();
   if (!imagem || !imagem.base64) return [];
 
+  // Tenta Gemini primeiro (melhor qualidade de OCR)
   if (geminiKey) {
     try {
       setGeminiKey(geminiKey);
       const resultado = await extrairTitulosComGemini(imagem.base64);
       if (resultado.length > 0) return resultado;
-    } catch {
-      // Gemini pode falhar por cota (429). O app cai para Groq sem travar.
+    } catch (e) {
+      console.warn('[OCR] Gemini falhou, tentando Groq...', e);
     }
   }
 
+  // Fallback: Groq Vision
   if (groqKey) {
     try {
-      return await extrairTitulosDaImagem(imagem.base64);
-    } catch {
-      return [];
+      const resultado = await extrairTitulosDaImagem(imagem.base64);
+      if (resultado.length > 0) return resultado;
+    } catch (e) {
+      console.warn('[OCR] Groq Vision também falhou:', e);
     }
   }
 

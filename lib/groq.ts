@@ -2,8 +2,8 @@
 // Chave gratuita em: https://console.groq.com
 
 const GROQ_BASE = 'https://api.groq.com/openai/v1';
-const MODELO_CHAT   = 'llama-3.3-70b-versatile';
-const MODELO_VISION = 'llama-3.2-11b-vision-preview'; // suporta imagens (Groq free)
+const MODELO_CHAT = 'llama-3.3-70b-versatile';
+const MODELO_VISION = 'meta-llama/llama-4-scout-17b-16e-instruct'; // modelo vision atual Groq 2026
 
 let _groqKey = '';
 export function setGroqKey(key: string) { _groqKey = key; }
